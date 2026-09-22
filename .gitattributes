@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.gif binary
+*.png binary
+*.pdf binary
+
+# Unified diffs prefix blank context lines with one required space.
+*.patch whitespace=-blank-at-eol

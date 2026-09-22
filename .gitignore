@@ -1,0 +1,17 @@
+.build/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.ruff_cache/
+.pytest_cache/
+/build/
+/dist/
+.env
+.env.*
+!.env.example
+
+# Generated measurement artifacts
+/output/*
+!/output/.gitignore

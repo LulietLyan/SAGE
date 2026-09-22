@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sage-triton-cpu"
+version = "0.2.0"
+description = "SAGE: measured-cost FP32 GEMM scheduling for TritonCPU and Arm SME"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.optional-dependencies]
+experiments = ["torch>=2.6", "numpy>=1.26", "matplotlib>=3.8", "pybind11>=2.13", "setuptools>=68"]
+dev = ["ruff==0.16.8", "clang-format==23.1.1"]
+
+[project.urls]
+Repository = "https://github.com/LulietLyan/SAGE"
+Issues = "https://github.com/LulietLyan/SAGE/issues"
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [".build", "patches"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E402"] # Scripts configure import paths and Matplotlib before imports.
