@@ -33,7 +33,7 @@
 
 ## 基线与阻塞项
 
-OpenBLAS ARMV8SVE 覆盖 33 个形状、单 NUMA 的 1/8 线程和跨 NUMA 的 8 线程。OpenBLAS ARMV9SME 作为附加诊断覆盖 8 个形状。PyTorch 2.7.1 记录了实际 wheel 和线程后端。
+OpenBLAS ARMV8SVE 覆盖 33 个形状、单 NUMA 的 1/8 线程和跨 NUMA 的 8 线程。OpenBLAS ARMV9SME 已补做同样的 33 形状覆盖，结果保存在论文包的 `data/openblas-armv9sme-full/`。PyTorch 2.7.1 记录了实际 wheel 和线程后端。
 
 KML_BLAS 2.2.0 已确认包含 LP64 `cblas_sgemm`、线程设置接口和 NEON/SVE pthread 库，但在两个实际 Kunpeng SME 节点初始化时均因 CPU ID 校验退出。现有数据不能支持 KML_BLAS 与 Apple Accelerate 的直接性能结论，正式报告将其标记为阻塞。
 

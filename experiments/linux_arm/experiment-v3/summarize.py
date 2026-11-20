@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from statistics import median
 from collections import defaultdict
+import sys
 
 
 def read(path):
@@ -85,42 +86,59 @@ def aggregate(run):
 
 
 def plot(summary, path):
-    import matplotlib.pyplot as plt
+    import matplotlib
 
-    colors = dict(generic="#64748b", **{"sme-fixed": "#d97706"}, ours="#047857",
-                  openblas="#1d4ed8", kblas="#941f48", pytorch="#6535a6")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import MaxNLocator
+
+    root = Path(__file__).resolve().parents[3]
+    for style_root in (root / "experiments", Path(__file__).resolve().parents[1]):
+        if (style_root / "plot_style.py").is_file():
+            sys.path.insert(0, str(style_root))
+            break
+    from plot_style import FIG_DOUBLE_TALL, RC, nature_axes, save_figure
+
+    colors = dict(generic="#5B6B7A", **{"sme-fixed": "#1B9E77"}, ours="#08519C",
+                  openblas="#1D4ED8", kblas="#941F48", pytorch="#6535A6")
+    markers = dict(generic="o", **{"sme-fixed": "s"}, ours="D", openblas="o", kblas="P", pytorch="^")
     available = sorted({r["threads"] for r in summary}, key=int)
     budgets = sorted({available[0], available[-1]}, key=int)
-    fig, axes = plt.subplots(2, len(budgets), figsize=(6 * len(budgets), 8), squeeze=False)
-    for column, t in enumerate(budgets):
-        for method in sorted({r["method"] for r in summary}):
-            rows = sorted((r for r in summary if r["threads"] == t and r["m"] == r["n"] == r["k"]),
-                          key=lambda r: int(r["m"]))
-            rows = [r for r in rows if r["method"] == method]
-            if not rows:
-                continue
-            x = [int(r["m"]) for r in rows]
-            times = [r["median_ns"] / 1e6 for r in rows]
-            low = [r["min_process_ns"] / 1e6 for r in rows]
-            high = [r["max_process_ns"] / 1e6 for r in rows]
-            color = colors.get(method)
-            axes[0, column].plot(x, [r["logical_gflops"] for r in rows], label=method, color=color)
-            axes[1, column].plot(x, times, label=method, color=color)
-            axes[1, column].fill_between(x, low, high, color=color, alpha=0.13)
-        axes[0, column].set_title(f"Requested threads: {t}")
-        for ax in axes[:, column]:
-            ax.grid(alpha=0.24)
-            ax.set_xlabel("Square dimension M = N = K")
-            if ax.get_legend_handles_labels()[0]:
-                ax.legend(frameon=False)
-    axes[0, 0].set_ylabel("Logical GFLOP/s")
-    for ax in axes[1, :]:
-        ax.set_yscale("log")
-    axes[1, 0].set_ylabel("Full-call latency (ms)")
-    fig.suptitle(f"FP32 GEMM on {summary[0]['hostname']} · {summary[0]['topology']} NUMA")
-    fig.tight_layout()
-    fig.savefig(path, dpi=160, bbox_inches="tight")
-    plt.close(fig)
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(2, len(budgets), figsize=FIG_DOUBLE_TALL, squeeze=False, sharey="row")
+        for column, t in enumerate(budgets):
+            for method in sorted({r["method"] for r in summary}):
+                rows = sorted(
+                    (r for r in summary if r["threads"] == t and r["m"] == r["n"] == r["k"] and r["method"] == method),
+                    key=lambda r: int(r["m"]),
+                )
+                if not rows:
+                    continue
+                x = [int(r["m"]) for r in rows]
+                times = [float(r["median_ns"]) / 1e6 for r in rows]
+                low = [float(r["min_process_ns"]) / 1e6 for r in rows]
+                high = [float(r["max_process_ns"]) / 1e6 for r in rows]
+                color = colors.get(method, "#555555")
+                marker = markers.get(method, "o")
+                axes[0, column].plot(x, [float(r["logical_gflops"]) for r in rows], label=method,
+                                      color=color, marker=marker, markersize=3.2, linewidth=1.2)
+                axes[1, column].plot(x, times, label=method, color=color, marker=marker,
+                                     markersize=3.2, linewidth=1.2)
+                axes[1, column].fill_between(x, low, high, color=color, alpha=0.12, linewidth=0)
+            for row_index, axis in enumerate(axes[:, column]):
+                axis.set_xscale("log", base=2)
+                axis.set_xticks([1024, 2048, 4096])
+                axis.set_xticklabels(["1024", "2048", "4096"])
+                axis.set_xlabel(r"Square dimension $M{=}N{=}K$")
+                axis.yaxis.set_major_locator(MaxNLocator(nbins=4, min_n_ticks=3))
+                nature_axes(axis)
+                axis.legend(loc="upper left" if row_index == 0 else "lower right", fontsize=6,
+                            frameon=False, borderaxespad=0.3)
+            axes[0, column].set_title(f"{t} thread{'s' if int(t) != 1 else ''}")
+        axes[0, 0].set_ylabel("Logical GFLOP/s")
+        axes[1, 0].set_ylabel("Full-call latency (ms)")
+        fig.suptitle(f"FP32 GEMM · {summary[0]['topology']} NUMA", fontsize=8, y=1.01)
+        save_figure(fig, path.parent, path.stem)
 
 
 def main():
