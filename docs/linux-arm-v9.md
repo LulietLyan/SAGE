@@ -37,7 +37,7 @@ OpenBLAS ARMV8SVE 覆盖 33 个形状、单 NUMA 的 1/8 线程和跨 NUMA 的 8
 
 KML_BLAS 2.2.0 已确认包含 LP64 `cblas_sgemm`、线程设置接口和 NEON/SVE pthread 库，但在两个实际 Kunpeng SME 节点初始化时均因 CPU ID 校验退出。现有数据不能支持 KML_BLAS 与 Apple Accelerate 的直接性能结论，正式报告将其标记为阻塞。
 
-Apple M4 只恢复了论文 ZIP 中的汇总和逐尺寸摘要，逐窗口 CSV 已不在归档中。Linux 结果单独校准和报告。候选排序、分块、K 分段、A 打包和 B 布局消融因正式校准耗时未完成，状态保存在 `data/ablation-status.json`。
+Apple M4 只恢复了论文 ZIP 中的汇总和逐尺寸摘要，逐窗口 CSV 已不在归档中。Linux 结果单独校准和报告。Linux 已补做 8 线程、1024³ 和 2049³ 的 14 方法候选选择消融，单 NUMA 和跨 NUMA 各 3 个进程、4 个窗口，结果保存在论文包的 `data/ablation-single/`、`data/ablation-cross/` 和 `figures/ablation-regret.svg`。这组实验量化选择差距，没有把单个模型项解释为因果贡献。
 
 ## 复跑入口
 
