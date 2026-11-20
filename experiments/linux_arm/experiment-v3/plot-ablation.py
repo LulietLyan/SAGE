@@ -1,87 +1,102 @@
 #!/usr/bin/env python3
-"""Plot measured-schedule regret from ablation-summary.csv files."""
+"""Plot Linux schedule-selection regret with the main-branch figure style."""
+
+from __future__ import annotations
+
 import argparse
 import csv
 from pathlib import Path
+import sys
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "experiments"))
+from plot_style import COLORS, FIG_DOUBLE, MARKERS, RC, nature_axes, parity_line, save_figure
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("summaries", nargs="+", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-
+def load_rows(paths: list[Path]) -> list[dict[str, str]]:
     rows = []
-    for summary in args.summaries:
-        with summary.open(newline="") as stream:
+    for path in paths:
+        with path.open(newline="") as stream:
             rows.extend(csv.DictReader(stream))
-    rows.sort(key=lambda row: (row["topology"], int(row["m"])))
+    return sorted(rows, key=lambda row: (row["topology"], int(row["m"])))
 
-    labels = [f"{row['topology']} {row['m']}" for row in rows]
-    ratios = [float(row["sage_over_best_latency"]) for row in rows]
-    colors = ["#2f6f9f" if row["topology"] == "single" else "#c2743c" for row in rows]
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        import matplotlib.pyplot as plt
-    except ModuleNotFoundError:
-        if args.output.suffix.lower() != ".svg":
-            raise SystemExit("matplotlib is required for raster/PDF output. Use an .svg output for the dependency-free fallback.")
-        write_svg(args.output, rows, labels, ratios, colors)
-        return
 
-    fig, axis = plt.subplots(figsize=(8.2, 4.6))
-    bars = axis.bar(labels, ratios, color=colors, width=0.66)
-    axis.axhline(1.0, color="#333333", linewidth=1.0)
-    axis.set_ylabel("SAGE latency / best measured latency")
-    axis.set_xlabel("NUMA placement and matrix size")
-    axis.set_ylim(0.0, max(1.45, max(ratios) * 1.22))
-    axis.grid(axis="y", color="#d9d9d9", linewidth=0.7)
-    axis.set_axisbelow(True)
-    for bar, row in zip(bars, rows):
-        axis.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.025,
-            f"{float(row['sage_over_best_latency']):.3f}x\n{row['best_measured']}",
+def plot(rows: list[dict[str, str]], output: Path) -> None:
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(1, 2, figsize=FIG_DOUBLE, sharey=True)
+        for axis, topology, panel in zip(axes, ("single", "cross"), ("a", "b")):
+            subset = [row for row in rows if row["topology"] == topology]
+            sizes = [int(row["m"]) for row in subset]
+            ratios = [float(row["sage_over_best_latency"]) for row in subset]
+            axis.set_xscale("log", base=2)
+            axis.set_xticks(sizes)
+            axis.set_xticklabels([str(size) for size in sizes])
+            axis.plot(
+                sizes,
+                ratios,
+                color=COLORS["ours"],
+                marker=MARKERS["ours"],
+                linewidth=1.65,
+                markersize=4.2,
+                markerfacecolor=COLORS["ours"],
+                markeredgecolor=COLORS["ours"],
+                markeredgewidth=0.55,
+                label="SAGE / best measured",
+                zorder=5,
+            )
+            for size, ratio, row in zip(sizes, ratios, subset):
+                axis.annotate(
+                    f"{ratio:.3f}×\n{row['best_measured']}",
+                    (size, ratio),
+                    xytext=(0, 7),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=6,
+                    color=COLORS["ours"],
+                )
+            parity_line(axis)
+            axis.set_ylim(0.95, max(1.35, max(ratios) * 1.15))
+            axis.yaxis.set_major_locator(MaxNLocator(nbins=4, min_n_ticks=3))
+            axis.set_xlabel(r"Square dimension $M{=}N{=}K$")
+            axis.set_title("Single NUMA" if topology == "single" else "Cross NUMA")
+            axis.legend(loc="upper left", fontsize=6, frameon=False, borderaxespad=0.2)
+            nature_axes(axis)
+            axis.text(
+                -0.14,
+                1.05,
+                f"({panel})",
+                transform=axis.transAxes,
+                fontsize=8,
+                fontweight="bold",
+                va="bottom",
+                ha="left",
+                color="#272727",
+            )
+        axes[0].set_ylabel("SAGE latency / best measured candidate")
+        fig.text(
+            0.5,
+            1.01,
+            "Linux Arm v9 schedule-selection gap",
             ha="center",
             va="bottom",
             fontsize=8,
         )
-    fig.tight_layout()
-    fig.savefig(args.output, dpi=180)
-    if args.output.suffix.lower() != ".pdf":
-        fig.savefig(args.output.with_suffix(".pdf"))
+        save_figure(fig, output.parent, output.stem)
 
 
-def write_svg(path, rows, labels, ratios, colors):
-    width, height = 900, 480
-    left, top, right, bottom = 90, 38, 24, 92
-    plot_width, plot_height = width - left - right, height - top - bottom
-    limit = max(1.45, max(ratios) * 1.22)
-    baseline = top + plot_height
-    pieces = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '<style>text{font-family:Arial,sans-serif;fill:#222} .small{font-size:12px} .axis{stroke:#333;stroke-width:1} .grid{stroke:#ddd;stroke-width:1}</style>',
-        '<rect width="100%" height="100%" fill="white"/>',
-        '<text x="450" y="22" text-anchor="middle" font-size="16">Linux Arm v9 ablation regret</text>',
-        f'<text x="18" y="{top + plot_height / 2}" text-anchor="middle" transform="rotate(-90 18 {top + plot_height / 2})" class="small">SAGE latency / best measured latency</text>',
-    ]
-    for tick in (0.0, 0.5, 1.0, 1.5):
-        y = baseline - tick / limit * plot_height
-        pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>')
-        pieces.append(f'<text x="{left-10}" y="{y+4:.1f}" text-anchor="end" class="small">{tick:.1f}</text>')
-    pieces.append(f'<line x1="{left}" y1="{baseline}" x2="{width-right}" y2="{baseline}" class="axis"/>')
-    bar_width = plot_width / max(1, len(rows)) * 0.62
-    for index, (row, label, ratio, color) in enumerate(zip(rows, labels, ratios, colors)):
-        center = left + plot_width * (index + 0.5) / len(rows)
-        x = center - bar_width / 2
-        y = baseline - ratio / limit * plot_height
-        pieces.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width:.1f}" height="{baseline-y:.1f}" fill="{color}"/>')
-        pieces.append(f'<text x="{center:.1f}" y="{y-8:.1f}" text-anchor="middle" class="small">{ratio:.3f}x</text>')
-        pieces.append(f'<text x="{center:.1f}" y="{baseline+20:.1f}" text-anchor="middle" class="small">{label}</text>')
-        pieces.append(f'<text x="{center:.1f}" y="{baseline+36:.1f}" text-anchor="middle" class="small">{row["best_measured"]}</text>')
-    pieces.append(f'<text x="{width/2}" y="{height-16}" text-anchor="middle" class="small">NUMA placement and matrix size. Label below each bar is the best measured schedule.</text>')
-    pieces.append('</svg>')
-    path.write_text("\n".join(pieces))
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("summaries", nargs="+", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    plot(load_rows(args.summaries), args.output)
 
 
 if __name__ == "__main__":

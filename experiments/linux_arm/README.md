@@ -42,3 +42,17 @@ bash run-linux.sh experiment-v3/gemm.py --output formal-cross --topology cross \
 调度消融使用相同的 holdout 计时器。重点方法是 `ours`、`fixed-control`、`vector-a`、`tile-m`、`k-strip`、`local-b` 和 `global-b`。可追加排序候选 `ours-rank-2`、`ours-rank-5` 等。定形状消融推荐 `--shapes 1024x1024x1024 2049x2049x2049`，候选配置和实际调用路径见 checks.csv 的证据列。
 
 在本机使用 Python 3.11+ 和 matplotlib 生成汇总 CSV 与图。例 `python experiment-v3/summarize.py formal-single --data data --figures figures`。分析脚本检查校验行、进程和窗口的一致性，按每个独立进程的窗口中位数配对。每个输出目录须为新路径。
+
+候选选择消融的汇总和主分支风格图表可用以下命令生成：
+
+```sh
+python experiment-v3/ablation-summary.py data/ablation-single \
+  --output data/ablation-single-summary.csv
+python experiment-v3/ablation-summary.py data/ablation-cross \
+  --output data/ablation-cross-summary.csv
+python experiment-v3/plot-ablation.py \
+  data/ablation-single-summary.csv data/ablation-cross-summary.csv \
+  --output figures/ablation-regret.png
+```
+
+`plot-ablation.py` 复用仓库根目录的 `experiments/plot_style.py`，一次导出 PDF、SVG 和 PNG。
