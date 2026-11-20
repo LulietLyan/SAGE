@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "experiments"))
+for style_root in (ROOT / "experiments", Path(__file__).resolve().parents[1]):
+    if (style_root / "plot_style.py").is_file():
+        sys.path.insert(0, str(style_root))
+        break
 from plot_style import COLORS, FIG_DOUBLE, MARKERS, RC, nature_axes, parity_line, save_figure
 
 
