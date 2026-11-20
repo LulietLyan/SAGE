@@ -33,3 +33,7 @@ PROBE_NAME:
     ldp d14, d15, [sp, #48]
     ldp d8, d9, [sp], #64
     ret
+
+#if defined(__linux__)
+.section .note.GNU-stack,"",%progbits
+#endif

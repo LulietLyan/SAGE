@@ -1,0 +1,11 @@
+--- a/third_party/cpu/backend/compiler.py
++++ b/third_party/cpu/backend/compiler.py
+@@ -537,6 +537,8 @@
+             lib_dirs = cpu_driver.library_dirs
+             libs = ["m", "TritonCPURuntime", "sleef"]
+             ccflags = list(cpu_driver.ccflags)
++            if platform.system() == "Linux" and metadata.get("sme_plan_selected_sme") == 1:
++                ccflags.append("-march=armv9.2-a+sme")
+             so = _build("kernel", asm_path, tmpdir, lib_dirs, cpu_driver.include_dirs, libs, ccflags)
+             with open(so, "rb") as f:
+                 return f.read()

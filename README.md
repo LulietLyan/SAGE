@@ -17,7 +17,7 @@
   <a href="https://github.com/LulietLyan/SAGE/stargazers"><img src="https://img.shields.io/github/stars/LulietLyan/SAGE?style=for-the-badge" alt="GitHub stars"></a>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++17">
-  <img src="https://img.shields.io/badge/Native-macOS_arm64-555555?style=for-the-badge&logo=apple" alt="Native target: macOS arm64">
+  <img src="https://img.shields.io/badge/Native-macOS_arm64%20%7C%20Linux_AArch64_SME-555555?style=for-the-badge" alt="Native target: macOS arm64 and Linux AArch64 SME">
 </p>
 
 <img src="image/line-neon.gif" width="100%" alt="彩色分隔线">
@@ -40,7 +40,7 @@
 
 **SAGE** 为 [TritonCPU](https://github.com/triton-lang/triton-cpu) 增加基于设备校准的 GEMM 调度与原生 [Arm Scalable Matrix Extension（SME）](https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/3-streaming-mode/) 代码生成。同一份 Triton 矩阵乘法，通过不同编译模式比较普通 CPU 路径、固定 SME 调度和成本模型选择的调度。
 
-当前原生路径面向 **macOS / Apple arm64，要求可执行 SME 且 streaming vector length（SVL）为 512 位**。已有目标设备为 Apple M4；其他操作系统、设备和数据类型尚未验证。Arm v9 名称本身不足以保证该实现可用，实际能力由探测程序和运行时检查确定。见[构建说明](patches/README.md)。
+当前原生路径已在 **macOS / Apple arm64** 和独立的 **Linux / AArch64 SME** 实验分支上验证，均要求可执行 SME 且 streaming vector length（SVL）为 512 位。`main` 保留 Apple M4 实验版本，Linux Arm v9 的构建、探针和复现实验位于 `linux-arm-v9` 分支。Arm v9 名称本身不足以保证该实现可用，实际能力由探测程序和运行时检查确定。见[构建说明](patches/README.md)和[Linux Arm v9 复现说明](experiments/linux_arm/README.md)。
 
 ## 设计理念
 

@@ -29,8 +29,12 @@ and accepts one through four. No sibling checkout, old object file, cached
 link command or prebuilt Triton compiler is used. Subsequent invocations use
 normal Ninja incremental dependency checks inside this new build directory.
 
-The native implementation currently targets macOS on Apple arm64. Build tools
-and dependencies are found from the active Python environment, `CC`/`CXX`,
+The `main` branch native implementation targets macOS on Apple arm64. The
+`linux-arm-v9` branch adds the Linux AArch64 path used by the Kunpeng
+experiment. Its scripts apply the Linux host-fact and ELF JIT patches, link
+the compiler-rt SME ABI helpers, and require a runtime probe showing
+SME_F32F32 with a 512-bit streaming vector length. Build tools and dependencies
+are found from the active Python environment, `CC`/`CXX`,
 `LLVM_SYSPATH` and Homebrew's libomp headers. The pinned LLVM default is
 `62b7cf9623fc310525f39ed69aaecc318a909731`, macOS arm64 package build 2; a fresh
 download is checked against its upstream SHA-256. LLVM is a build dependency,

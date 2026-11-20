@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+import ctypes
 import hashlib
 import json
 import os
@@ -199,6 +200,15 @@ def compile_gemm(a, b, out, mode, threads, profile=None):
     kb, n = b.shape
     if kb != k or tuple(out.shape) != (m, n) or min(m, n, k) <= 0:
         raise ValueError("invalid GEMM shape")
+    if sys.platform == "linux" and mode != "generic":
+        libc = ctypes.CDLL(None)
+        libc.getauxval.argtypes = [ctypes.c_ulong]
+        libc.getauxval.restype = ctypes.c_ulong
+        hwcap2 = libc.getauxval(26)
+        required = (1 << 23) | (1 << 29)
+        svl = libc.prctl(64, 0, 0, 0, 0)
+        if hwcap2 & required != required or svl < 0 or svl & 0xffff != 64:
+            raise RuntimeError("current Linux SME GEMM requires SME_F32F32 and 512-bit SVL")
     constants = (m, n, k, 32, 64, 16)
     grid = ((m + 31) // 32 * ((n + 63) // 64), 1, 1)
     content = json.dumps(profile, sort_keys=True, separators=(",", ":")) if profile else ""

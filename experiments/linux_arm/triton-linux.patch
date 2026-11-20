@@ -1,0 +1,16 @@
+--- a/python/triton/runtime/build.py
++++ b/python/triton/runtime/build.py
+@@ -129,10 +129,11 @@
+                     cc_cmd += ["-lomp"]
+                 else:
+                     print("Warning: TRITON_LOCAL_LIBOMP_PATH is not set for Apple clang. OpenMP is disabled.")
++            elif system == "Linux" and libomp_path and "clang" in os.path.basename(cc):
++                cc_cmd += ["-fopenmp=libomp", f"-I{libomp_path}/include",
++                           f"-L{libomp_path}/lib", f"-Wl,-rpath,{libomp_path}/lib"]
+             else:
+                 cc_cmd += ["-fopenmp"]
+-                if libomp_path:
+-                    print("Info: Ignoring TRITON_LOCAL_LIBOMP_PATH for non-Apple clang compiler")
+     if src.endswith(".s"):
+         # This is required to properly parse .file directives
+         cc_cmd += ["-g"]

@@ -1,0 +1,206 @@
+--- a/adapters/runtime/SmeProbe.S
++++ b/adapters/runtime/SmeProbe.S
+@@ -33,3 +33,7 @@
+     ldp d14, d15, [sp, #48]
+     ldp d8, d9, [sp], #64
+     ret
++
++#if defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++#endif
+--- a/adapters/triton_cpu/CompilerGemmProfile.cpp
++++ b/adapters/triton_cpu/CompilerGemmProfile.cpp
+@@ -2,7 +2,14 @@
+ #include "llvm/Support/JSON.h"
+ #include <cmath>
+ #include <dlfcn.h>
++#if defined(__APPLE__)
+ #include <sys/sysctl.h>
++#elif defined(__linux__)
++#include <fstream>
++#include <sys/auxv.h>
++#include <sys/prctl.h>
++#include <sys/utsname.h>
++#endif
+ #include "llvm/Support/MemoryBuffer.h"
+ #include "llvm/Support/SHA256.h"
+ #include "llvm/ADT/StringExtras.h"
+@@ -54,6 +61,7 @@
+   auto *host = d ? d->getObject("host") : nullptr;
+   if (!host)
+     return bad("profile must contain observed host facts");
++#if defined(__APPLE__)
+   for (auto key : {"hw.model", "machdep.cpu.brand_string", "hw.memsize", "kern.osrelease"}) {
+     auto expected = host->getString(key);
+     if (!expected)
+@@ -77,7 +85,33 @@
+     }
+     if (*expected != actual)
+       return bad("calibration host identity mismatch");
++  }
++#elif defined(__linux__)
++  struct utsname uts {};
++  if (uname(&uts))
++    return bad("cannot read Linux host identity");
++  std::ifstream cpu("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1");
++  std::ifstream memory("/proc/meminfo");
++  std::string midr, memoryLine;
++  if (!std::getline(cpu, midr) || !std::getline(memory, memoryLine))
++    return bad("cannot read Linux CPU or memory identity");
++  for (auto [key, actual] : {
++           std::pair<llvm::StringRef, llvm::StringRef>{"linux.nodename", uts.nodename},
++           {"linux.midr_cpu0", midr}, {"linux.meminfo_first_line", memoryLine},
++           {"linux.release", uts.release}}) {
++    auto expected = host->getString(key);
++    if (!expected || *expected != actual)
++      return bad("Linux calibration host identity mismatch");
+   }
++  constexpr unsigned long SME = 1UL << 23, SME_F32F32 = 1UL << 29;
++  constexpr int GetSmeVl = 64, VlMask = 0xffff;
++  const int streamingLength = prctl(GetSmeVl, 0UL, 0UL, 0UL, 0UL);
++  if ((getauxval(AT_HWCAP2) & (SME | SME_F32F32)) != (SME | SME_F32F32) ||
++      streamingLength < 0 || (streamingLength & VlMask) != 64)
++    return bad("Linux calibration needs executable FP32 SME at 512-bit SVL");
++#else
++  return bad("unsupported host OS for native calibration");
++#endif
+   if (!d || !c)
+     return bad("compiler profile requires device and calibration objects");
+   auto identity = d->getString("identity");
+--- a/experiments/calibrate.py
++++ b/experiments/calibrate.py
+@@ -11,6 +11,7 @@
+ import argparse
+ import contextlib
+ import csv
++import ctypes
+ import gc
+ import hashlib
+ import json
+@@ -172,17 +173,40 @@
+ 
+ 
+ def _probe():
+-    host = {}
+-    for key, field in HOST_FIELDS.items():
+-        result = subprocess.run(["/usr/sbin/sysctl", "-n", key], text=True, capture_output=True)
+-        if result.returncode and key in (
+-            "hw.model",
+-            "machdep.cpu.brand_string",
+-            "hw.memsize",
+-            "kern.osrelease",
+-        ):
+-            raise RuntimeError(f"cannot read required host fact {key}")
+-        host[field] = result.stdout.strip() if result.returncode == 0 else "unknown"
++    if sys.platform == "linux":
++        libc = ctypes.CDLL(None, use_errno=True)
++        libc.getauxval.argtypes = [ctypes.c_ulong]
++        libc.getauxval.restype = ctypes.c_ulong
++        hwcap2 = libc.getauxval(26)
++        required = (1 << 23) | (1 << 29)
++        if hwcap2 & required != required:
++            raise RuntimeError("Linux must expose both SME and SME_F32F32")
++        svl = libc.prctl(64, 0, 0, 0, 0)
++        if svl < 0 or svl & 0xffff != 64:
++            raise RuntimeError("PR_SME_GET_VL must report 64 bytes")
++        facts = dict(zip(HOST_FIELDS.values(), (
++            os.uname().nodename,
++            Path("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1").read_text().strip(),
++            Path("/proc/meminfo").read_text().splitlines()[0],
++            os.uname().release,
++            str(os.cpu_count()),
++            str(len(os.sched_getaffinity(0))),
++            str((hwcap2 >> 23) & 1),
++            str((hwcap2 >> 37) & 1),
++        )))
++        host = facts
++    else:
++        host = {}
++        for key, field in HOST_FIELDS.items():
++            result = subprocess.run(["/usr/sbin/sysctl", "-n", key], text=True, capture_output=True)
++            if result.returncode and key in (
++                "hw.model",
++                "machdep.cpu.brand_string",
++                "hw.memsize",
++                "kern.osrelease",
++            ):
++                raise RuntimeError(f"cannot read required host fact {key}")
++            host[field] = result.stdout.strip() if result.returncode == 0 else "unknown"
+     result = subprocess.run([str(NATIVE / "sme-probe")], text=True, capture_output=True, timeout=20)
+     if result.returncode:
+         raise RuntimeError(
+--- a/python/sme_plan/calibration.py
++++ b/python/sme_plan/calibration.py
+@@ -10,6 +10,7 @@
+ import hashlib
+ import json
+ import math
++import sys
+ from pathlib import Path
+ from statistics import median
+ 
+@@ -30,7 +31,21 @@
+     "hw.optional.arm.FEAT_SME2": "host_reported_sme2",
+ }
+ 
++if sys.platform == "linux":
++    # Use Linux training dimensions outside the formal evaluation shape set.
++    SIZES = (704, 1664, 3008, 3456, 4160)
++    HOST_FIELDS = {
++        "linux.nodename": "host_model",
++        "linux.midr_cpu0": "host_cpu",
++        "linux.meminfo_first_line": "host_memory_bytes",
++        "linux.release": "host_osrelease",
++        "linux.online_cpus": "host_logical_cpus",
++        "linux.sched_cpus": "host_physical_cpus",
++        "linux.hwcap2_sme": "host_reported_sme",
++        "linux.hwcap2_sme2": "host_reported_sme2",
++    }
+ 
++
+ def read_csv(path):
+     with Path(path).open(newline="") as stream:
+         return list(csv.DictReader(stream))
+--- a/python/sme_plan/compiler_backend.py
++++ b/python/sme_plan/compiler_backend.py
+@@ -2,6 +2,7 @@
+ 
+ from functools import lru_cache
+ from pathlib import Path
++import ctypes
+ import hashlib
+ import json
+ import os
+@@ -199,6 +200,15 @@
+     kb, n = b.shape
+     if kb != k or tuple(out.shape) != (m, n) or min(m, n, k) <= 0:
+         raise ValueError("invalid GEMM shape")
++    if sys.platform == "linux" and mode != "generic":
++        libc = ctypes.CDLL(None)
++        libc.getauxval.argtypes = [ctypes.c_ulong]
++        libc.getauxval.restype = ctypes.c_ulong
++        hwcap2 = libc.getauxval(26)
++        required = (1 << 23) | (1 << 29)
++        svl = libc.prctl(64, 0, 0, 0, 0)
++        if hwcap2 & required != required or svl < 0 or svl & 0xffff != 64:
++            raise RuntimeError("current Linux SME GEMM requires SME_F32F32 and 512-bit SVL")
+     constants = (m, n, k, 32, 64, 16)
+     grid = ((m + 31) // 32 * ((n + 63) // 64), 1, 1)
+     content = json.dumps(profile, sort_keys=True, separators=(",", ":")) if profile else ""
+--- a/lib/Core/CompilerGemmPolicy.cpp
++++ b/lib/Core/CompilerGemmPolicy.cpp
+@@ -509,6 +509,14 @@
+       {4, 32, 32, 0, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
+       {8, 32, 32, 512, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
+       {8, 32, 32, 1024, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
++#if defined(__linux__)
++      // Holdout ablations relative to probe 0. Calibration fits indices 0–9.
++      {4, 8, 16, 0, CompilerGemmAPack::Vector4, CompilerGemmBLayout::Original},
++      {8, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::Original},
++      {4, 8, 16, 512, CompilerGemmAPack::Scalar, CompilerGemmBLayout::Original},
++      {4, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::LocalPanelPadSVL},
++      {4, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::GlobalPadSVL},
++#endif
+   };
+   const auto &device = request.device;
+   const auto &kernel = request.problem.kernel;

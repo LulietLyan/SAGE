@@ -1,0 +1,10 @@
+--- a/third_party/cpu/backend/compiler.py
++++ b/third_party/cpu/backend/compiler.py
+@@ -539,6 +539,7 @@
+             ccflags = list(cpu_driver.ccflags)
+             if platform.system() == "Linux" and metadata.get("sme_plan_selected_sme") == 1:
+                 ccflags.append("-march=armv9.2-a+sme")
++                libs.append("sage_sme_abi")
+             so = _build("kernel", asm_path, tmpdir, lib_dirs, cpu_driver.include_dirs, libs, ccflags)
+             with open(so, "rb") as f:
+                 return f.read()

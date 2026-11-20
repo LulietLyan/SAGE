@@ -10,6 +10,7 @@ import csv
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from statistics import median
 
@@ -29,6 +30,20 @@ HOST_FIELDS = {
     "hw.optional.arm.FEAT_SME": "host_reported_sme",
     "hw.optional.arm.FEAT_SME2": "host_reported_sme2",
 }
+
+if sys.platform == "linux":
+    # Use Linux training dimensions outside the formal evaluation shape set.
+    SIZES = (704, 1664, 3008, 3456, 4160)
+    HOST_FIELDS = {
+        "linux.nodename": "host_model",
+        "linux.midr_cpu0": "host_cpu",
+        "linux.meminfo_first_line": "host_memory_bytes",
+        "linux.release": "host_osrelease",
+        "linux.online_cpus": "host_logical_cpus",
+        "linux.sched_cpus": "host_physical_cpus",
+        "linux.hwcap2_sme": "host_reported_sme",
+        "linux.hwcap2_sme2": "host_reported_sme2",
+    }
 
 
 def read_csv(path):

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import ctypes
 import gc
 import hashlib
 import json
@@ -172,17 +173,40 @@ class Table:
 
 
 def _probe():
-    host = {}
-    for key, field in HOST_FIELDS.items():
-        result = subprocess.run(["/usr/sbin/sysctl", "-n", key], text=True, capture_output=True)
-        if result.returncode and key in (
-            "hw.model",
-            "machdep.cpu.brand_string",
-            "hw.memsize",
-            "kern.osrelease",
-        ):
-            raise RuntimeError(f"cannot read required host fact {key}")
-        host[field] = result.stdout.strip() if result.returncode == 0 else "unknown"
+    if sys.platform == "linux":
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.getauxval.argtypes = [ctypes.c_ulong]
+        libc.getauxval.restype = ctypes.c_ulong
+        hwcap2 = libc.getauxval(26)
+        required = (1 << 23) | (1 << 29)
+        if hwcap2 & required != required:
+            raise RuntimeError("Linux must expose both SME and SME_F32F32")
+        svl = libc.prctl(64, 0, 0, 0, 0)
+        if svl < 0 or svl & 0xffff != 64:
+            raise RuntimeError("PR_SME_GET_VL must report 64 bytes")
+        facts = dict(zip(HOST_FIELDS.values(), (
+            os.uname().nodename,
+            Path("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1").read_text().strip(),
+            Path("/proc/meminfo").read_text().splitlines()[0],
+            os.uname().release,
+            str(os.cpu_count()),
+            str(len(os.sched_getaffinity(0))),
+            str((hwcap2 >> 23) & 1),
+            str((hwcap2 >> 37) & 1),
+        )))
+        host = facts
+    else:
+        host = {}
+        for key, field in HOST_FIELDS.items():
+            result = subprocess.run(["/usr/sbin/sysctl", "-n", key], text=True, capture_output=True)
+            if result.returncode and key in (
+                "hw.model",
+                "machdep.cpu.brand_string",
+                "hw.memsize",
+                "kern.osrelease",
+            ):
+                raise RuntimeError(f"cannot read required host fact {key}")
+            host[field] = result.stdout.strip() if result.returncode == 0 else "unknown"
     result = subprocess.run([str(NATIVE / "sme-probe")], text=True, capture_output=True, timeout=20)
     if result.returncode:
         raise RuntimeError(

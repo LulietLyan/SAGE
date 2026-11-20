@@ -2,7 +2,7 @@
 
 [返回 README](../README.md) · [模型与实现](model.md)
 
-所有命令均从仓库根目录执行。原生测量应在支持 SME 的目标 Mac 上进行；本仓库不保存远程机器的测量结果。
+所有命令均从仓库根目录执行。`main` 的原生测量协议面向支持 SME 的目标 Mac；Linux Arm v9 的独立构建和测量协议见 [Linux Arm v9 复现说明](../experiments/linux_arm/README.md)。源码仓库不保存远程机器的原始测量数据，正式结果包位于配套论文目录的 `linux-arm-v9/`。
 
 ## 常用入口
 
@@ -93,3 +93,9 @@
 - [`stride_conflict_probe.cpp`](../experiments/stride_conflict_probe.cpp) 与 [`plot_stride_probe.py`](../experiments/plot_stride_probe.py)：标量加载诊断，不直接测量 SME；绘图通过 `--root` 指定含 `low_level_stride.csv` 的目录。
 - 密集尺寸列表含 8192，而源码备注固定 SME 对该 N 有拒绝限制。默认四方法密集 suite 可能在该点终止；远程复现实验应按已有协议限制尺寸，或明确用 `--methods generic ours pytorch` 比较三方法，不能把缺测当作完整四方法结果。
 - suite 汇总器可以合并多个 CSV，诊断图并非都校验完成状态与身份。应在同一版本的独立输出目录绘图，避免混入旧结果。
+
+## Linux Arm v9 实验
+
+Linux 实验使用 `linux-arm-v9` 分支，固定 SAGE 提交 `fa3881e104d5bf286ead4b6fe2651c51b7de4cd1` 和 TritonCPU 提交 `8261cd0638ca4745bb14133ca586e3bce19654ef`。复现目录包含离线依赖清单、Linux 补丁、SME 探针、构建脚本、OpenBLAS 基线脚本以及正式 GEMM 汇总器。脚本默认通过集群调度器提交到计算节点，不应在登录节点上执行长时间构建或正式计时。
+
+正式结果覆盖单 NUMA 的 1/8 线程和跨 NUMA 的 8 线程，并以 generic、固定 SME、SAGE、OpenBLAS ARMV8SVE 和 PyTorch 2.7.1 进行同机配对。KML_BLAS 2.2.0 已确认导出 SGEMM，但在实际 Kunpeng 节点初始化时因 CPU ID 校验退出，因此报告中标记为阻塞。完整 CSV、环境记录、校准 profile 和图表随论文实验包保存，不应把未完成的 KML 或消融结果解释为性能结论。

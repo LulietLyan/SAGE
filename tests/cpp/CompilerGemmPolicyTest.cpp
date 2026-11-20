@@ -251,7 +251,11 @@ void calibrationProbeTests() {
   auto r = fixture(2304, 2304, 2304);
   r.calibration = {};
   auto probes = compilerGemmCalibrationSchedules(r);
+#if defined(__linux__)
+  CHECK(probes.size() == 15);
+#else
   CHECK(probes.size() == 10);
+#endif
   for (std::size_t i = 0; i < probes.size(); ++i) {
     CHECK(probes[i].index == static_cast<std::int64_t>(i));
     CHECK(probes[i].schedule.threads == r.device.totalThreadBudget);
@@ -376,7 +380,11 @@ void globalPanelCostTests() {
   team.strategyResponses = strategies;
   CHECK(planCompilerGemm(r).apply);
   auto probes = compilerGemmCalibrationSchedules(r);
+#if defined(__linux__)
+  CHECK(probes.size() == 15);
+#else
   CHECK(probes.size() == 10);
+#endif
   CHECK(probes[7].supported && probes[8].supported && probes[9].supported);
   CHECK(probes[7].schedule.blockM == 128 && probes[7].schedule.stripK == 0);
   CHECK(probes[8].schedule.blockM == 256 && probes[8].schedule.stripK == 512);

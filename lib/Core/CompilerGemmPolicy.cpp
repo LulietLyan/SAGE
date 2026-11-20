@@ -509,6 +509,14 @@ compilerGemmCalibrationSchedules(const CompilerGemmPolicyRequest &request) {
       {4, 32, 32, 0, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
       {8, 32, 32, 512, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
       {8, 32, 32, 1024, CompilerGemmAPack::Vector4, CompilerGemmBLayout::GlobalPadSVL},
+#if defined(__linux__)
+      // Holdout ablations relative to probe 0. Calibration fits indices 0–9.
+      {4, 8, 16, 0, CompilerGemmAPack::Vector4, CompilerGemmBLayout::Original},
+      {8, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::Original},
+      {4, 8, 16, 512, CompilerGemmAPack::Scalar, CompilerGemmBLayout::Original},
+      {4, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::LocalPanelPadSVL},
+      {4, 8, 16, 0, CompilerGemmAPack::Scalar, CompilerGemmBLayout::GlobalPadSVL},
+#endif
   };
   const auto &device = request.device;
   const auto &kernel = request.problem.kernel;

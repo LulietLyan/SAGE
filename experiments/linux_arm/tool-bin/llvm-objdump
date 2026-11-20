@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# SAGE asks LLVM objdump to enable SME decoding. GNU binutils 2.37 on cn12038
+# decodes those ELF instructions directly, including smstart and FP32 fmopa.
+set -euo pipefail
+args=()
+for arg in "$@"; do
+    [[ "$arg" == "--mattr=+sme" ]] || args+=("$arg")
+done
+exec /usr/bin/objdump "${args[@]}"

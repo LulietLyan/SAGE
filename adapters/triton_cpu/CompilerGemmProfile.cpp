@@ -2,7 +2,14 @@
 #include "llvm/Support/JSON.h"
 #include <cmath>
 #include <dlfcn.h>
+#if defined(__APPLE__)
 #include <sys/sysctl.h>
+#elif defined(__linux__)
+#include <fstream>
+#include <sys/auxv.h>
+#include <sys/prctl.h>
+#include <sys/utsname.h>
+#endif
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/ADT/StringExtras.h"
@@ -54,6 +61,7 @@ llvm::Expected<CompilerGemmPolicyRequest> readCompilerGemmProfile(llvm::StringRe
   auto *host = d ? d->getObject("host") : nullptr;
   if (!host)
     return bad("profile must contain observed host facts");
+#if defined(__APPLE__)
   for (auto key : {"hw.model", "machdep.cpu.brand_string", "hw.memsize", "kern.osrelease"}) {
     auto expected = host->getString(key);
     if (!expected)
@@ -78,6 +86,32 @@ llvm::Expected<CompilerGemmPolicyRequest> readCompilerGemmProfile(llvm::StringRe
     if (*expected != actual)
       return bad("calibration host identity mismatch");
   }
+#elif defined(__linux__)
+  struct utsname uts {};
+  if (uname(&uts))
+    return bad("cannot read Linux host identity");
+  std::ifstream cpu("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1");
+  std::ifstream memory("/proc/meminfo");
+  std::string midr, memoryLine;
+  if (!std::getline(cpu, midr) || !std::getline(memory, memoryLine))
+    return bad("cannot read Linux CPU or memory identity");
+  for (auto [key, actual] : {
+           std::pair<llvm::StringRef, llvm::StringRef>{"linux.nodename", uts.nodename},
+           {"linux.midr_cpu0", midr}, {"linux.meminfo_first_line", memoryLine},
+           {"linux.release", uts.release}}) {
+    auto expected = host->getString(key);
+    if (!expected || *expected != actual)
+      return bad("Linux calibration host identity mismatch");
+  }
+  constexpr unsigned long SME = 1UL << 23, SME_F32F32 = 1UL << 29;
+  constexpr int GetSmeVl = 64, VlMask = 0xffff;
+  const int streamingLength = prctl(GetSmeVl, 0UL, 0UL, 0UL, 0UL);
+  if ((getauxval(AT_HWCAP2) & (SME | SME_F32F32)) != (SME | SME_F32F32) ||
+      streamingLength < 0 || (streamingLength & VlMask) != 64)
+    return bad("Linux calibration needs executable FP32 SME at 512-bit SVL");
+#else
+  return bad("unsupported host OS for native calibration");
+#endif
   if (!d || !c)
     return bad("compiler profile requires device and calibration objects");
   auto identity = d->getString("identity");
