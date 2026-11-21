@@ -34,7 +34,7 @@
 
 ## 测量口径
 
-默认 [GEMM](../experiments/gemm.py) 比较 `generic`、`sme-fixed`、`ours`、`pytorch`，采用 128–4096 的 24 个方阵尺寸、1/8 线程预算、每预算 5 个独立进程及每方法每尺寸 4 个交错窗口。窗口目标为 25 ms；实际耗时、重复次数和调整原因均保存。
+默认 [GEMM](../experiments/gemm.py) 比较 `generic`、`sme-fixed`、`ours`、`pytorch`。M4 主图使用单一线程预算的方阵 sweep 和四方法吞吐量曲线。Linux Arm v9 主结果同样固定为单 NUMA、1 个软件线程预算，8 线程和跨 NUMA 只作为已有数据的扩展性诊断。窗口目标、重复次数和调整原因均保存。
 
 [共享计时器](../experiments/common.py) 测量完整同步调用，包括每次的打包、复制、提交与等待。每进程先取窗口中位数，再跨进程汇总；误差范围为 min–max，不是置信区间。加速比在同一进程内配对。吞吐量使用逻辑 `2*M*N*K / median_ns`。
 
@@ -98,7 +98,7 @@
 
 Linux 实验使用 `linux-arm-v9` 分支，固定 SAGE 提交 `fa3881e104d5bf286ead4b6fe2651c51b7de4cd1` 和 TritonCPU 提交 `8261cd0638ca4745bb14133ca586e3bce19654ef`。复现目录包含离线依赖清单、Linux 补丁、SME 探针、构建脚本、OpenBLAS 基线脚本以及正式 GEMM 汇总器。脚本默认通过集群调度器提交到计算节点，不应在登录节点上执行长时间构建或正式计时。
 
-正式结果覆盖单 NUMA 的 1/8 线程和跨 NUMA 的 8 线程，并以 generic、固定 SME、SAGE、OpenBLAS ARMV8SVE 和 PyTorch 2.7.1 进行同机配对。代表性 1024³ 和 2049³ 形状的 8 线程候选选择消融已补做，使用 14 个候选方法和 3 个独立进程。KML_BLAS 2.2.0 已确认导出 SGEMM，但在实际 Kunpeng 节点初始化时因 CPU ID 校验退出，因此报告中标记为阻塞。完整 CSV、环境记录、校准 profile 和图表随论文实验包保存，未完成的 KML 仍不作为性能结论。
+正式主结果固定为单 NUMA、1 个软件线程预算，并以 generic、固定 SME、SAGE、OpenBLAS ARMV8SVE 和 PyTorch 2.7.1 进行同机配对。已有的单 NUMA 8 线程和跨 NUMA 8 线程结果保留为扩展性诊断。代表性 1024³ 和 2049³ 形状的 8 线程候选选择消融已补做，使用 14 个候选方法和 3 个独立进程。KML_BLAS 2.2.0 已确认导出 SGEMM，但在实际 Kunpeng 节点初始化时因 CPU ID 校验退出，因此报告中标记为阻塞。完整 CSV、环境记录、校准 profile 和图表随论文实验包保存，未完成的 KML 仍不作为性能结论。
 
 ### 协议审计与重绘
 
@@ -114,12 +114,9 @@ python experiments/linux_arm/protocol_audit.py \
 已有汇总 CSV 可直接重绘全部 shape sweep 和配对 speedup。脚本把矩形 shape 映射到 $(MNK)^{1/3}$，用独立进程 min--max 作为误差带，并用对数 speedup 轴避免 generic 基线遮住较小的 CPU/BLAS 比值：
 
 ```sh
-python experiments/linux_arm/plot_protocol_review.py \
+python experiments/linux_arm/plot_m4_style_linux.py \
   --summary /path/to/formal-single-merged-summary.csv \
-            /path/to/formal-cross-merged-summary.csv \
-  --paired /path/to/formal-single-merged-paired.csv \
-           /path/to/formal-cross-merged-paired.csv \
-  --figures /path/to/figures/protocol-review
+  --output /path/to/figures/protocol-review/linux-m4-style-single-thread
 ```
 
-这两个脚本不提交作业、不访问登录节点上的正式 benchmark，也不修改原始 CSV。图注应把 min--max 标成进程范围，不能称为置信区间。正式计时仍通过 `dsub` 在计算节点完成，登录节点只用于轻量身份、队列和探针检查。
+审计脚本不提交作业。M4 风格主图只使用已有单 NUMA、1 线程 summary CSV，不修改原始 CSV。多线程和跨 NUMA 诊断仍可使用 plot_protocol_review.py。正式计时仍通过 `dsub` 在计算节点完成，登录节点只用于轻量身份、队列和探针检查。

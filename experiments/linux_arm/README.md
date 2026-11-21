@@ -43,16 +43,15 @@ bash run-linux.sh experiment-v3/gemm.py --output formal-cross --topology cross \
 
 在本机使用 Python 3.11+ 和 matplotlib 生成汇总 CSV 与图。例 `python experiment-v3/summarize.py formal-single --data data --figures figures`。分析脚本检查校验行、进程和窗口的一致性，按每个独立进程的窗口中位数配对。汇总图和消融图都复用仓库根目录的 `experiments/plot_style.py`。每个输出目录须为新路径。
 
-协议审计和改进后的重绘不需要重新提交服务器作业。`protocol_audit.py` 读取已有 run 目录，检查完成状态、进程/窗口数量、目标窗口、正确性、主机一致性及编译/首次调用证据。`plot_protocol_review.py` 读取 `*-summary.csv` 与 `*-paired.csv`，输出完整 shape sweep 和配对 speedup 的 PDF、SVG、PNG。两者都不修改原始 CSV，也不在登录节点运行正式 benchmark。
+协议审计和改进后的重绘不需要重新提交服务器作业。`protocol_audit.py` 读取已有 run 目录，检查完成状态、进程/窗口数量、目标窗口、正确性、主机一致性及编译/首次调用证据。`plot_m4_style_linux.py` 从单 NUMA、1 线程 summary CSV 生成与 M4 主图一致的四方法单面板图。`plot_protocol_review.py` 仍用于多线程、跨 NUMA 和配对 speedup 诊断。两者都不修改原始 CSV，也不在登录节点运行正式 benchmark。
 
 ```sh
 python protocol_audit.py data/formal-single-merged data/formal-cross-merged \
   --json /tmp/linux-protocol-audit.json \
   --markdown /tmp/linux-protocol-audit.md
-python plot_protocol_review.py \
-  --summary data/formal-single-merged-summary.csv data/formal-cross-merged-summary.csv \
-  --paired data/formal-single-merged-paired.csv data/formal-cross-merged-paired.csv \
-  --figures /tmp/protocol-review
+python plot_m4_style_linux.py \
+  --summary data/formal-single-merged-summary.csv \
+  --output /tmp/protocol-review/linux-m4-style-single-thread
 ```
 
 候选选择消融的汇总和主分支风格图表可用以下命令生成：

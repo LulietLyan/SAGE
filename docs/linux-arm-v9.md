@@ -21,6 +21,8 @@
 
 ## 正式结果
 
+主结果固定为单 NUMA、1 个软件线程预算。这个口径与 M4 主图的四方法单曲线一致，也避免把 GPU warp/block 并行论文误读为 Arm CPU 多线程协议。已有 8 线程和跨 NUMA 结果保留作扩展性诊断。
+
 正式 GEMM 使用完整同步调用计时。窗口包括打包、复制、任务提交、计算和等待，构建、校准、首次 JIT 和正确性检查单独记录。每个方法和形状使用 3 个独立进程、4 个交错窗口，校准样本与评估样本分离。
 
 | 布局和线程 | SAGE / 固定 SME | SAGE / OpenBLAS ARMV8SVE | SAGE / PyTorch | SAGE / generic |
@@ -43,7 +45,7 @@ KML_BLAS 2.2.0 已确认包含 LP64 `cblas_sgemm`、线程设置接口和 NEON/S
 
 33 个正式 shape 同时覆盖方阵、非整 tile 方阵、长宽不对称用例和 255/257 cache-boundary 诊断。主文使用同进程配对 speedup 的跨 shape 几何均值，候选消融独立报告 SAGE 与实测候选下界的 observed regret。ARMV9SME OpenBLAS 属于补充诊断，KML_BLAS 属于阻塞项，不能把缺测当作 baseline 结果。
 
-不重新运行服务器实验即可审计和重绘：
+不重新运行服务器实验即可审计和重绘。M4 风格主图使用：
 
 ```sh
 python experiments/linux_arm/protocol_audit.py \
@@ -51,15 +53,12 @@ python experiments/linux_arm/protocol_audit.py \
   --json /path/to/protocol-audit.json \
   --markdown /path/to/protocol-audit.md
 
-python experiments/linux_arm/plot_protocol_review.py \
+python experiments/linux_arm/plot_m4_style_linux.py \
   --summary /path/to/formal-single-merged-summary.csv \
-            /path/to/formal-cross-merged-summary.csv \
-  --paired /path/to/formal-single-merged-paired.csv \
-           /path/to/formal-cross-merged-paired.csv \
-  --figures /path/to/figures/protocol-review
+  --output /path/to/figures/protocol-review/linux-m4-style-single-thread
 ```
 
-审计脚本只读归档，重绘脚本复用 `experiments/plot_style.py` 并输出 PDF、SVG、PNG。正式 benchmark 继续使用普通 SSH 和 Donau 计算节点，不在登录节点执行长时间构建或计时。
+审计脚本只读归档，M4 风格重绘脚本复用原有 serif 配色和 marker 语法并输出 PDF、SVG、PNG。多线程和跨 NUMA 诊断仍由 plot_protocol_review.py 生成。正式 benchmark 继续使用普通 SSH 和 Donau 计算节点，不在登录节点执行长时间构建或计时。
 
 Apple M4 只恢复了论文 ZIP 中的汇总和逐尺寸摘要，逐窗口 CSV 已不在归档中。Linux 结果单独校准和报告。Linux 已补做 8 线程、1024³ 和 2049³ 的 14 方法候选选择消融，单 NUMA 和跨 NUMA 各 3 个进程、4 个窗口，结果保存在论文包的 `data/ablation-single/`、`data/ablation-cross/` 和 `figures/ablation-regret.svg`。这组实验量化选择差距，没有把单个模型项解释为因果贡献。
 
