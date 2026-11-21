@@ -99,3 +99,27 @@
 Linux 实验使用 `linux-arm-v9` 分支，固定 SAGE 提交 `fa3881e104d5bf286ead4b6fe2651c51b7de4cd1` 和 TritonCPU 提交 `8261cd0638ca4745bb14133ca586e3bce19654ef`。复现目录包含离线依赖清单、Linux 补丁、SME 探针、构建脚本、OpenBLAS 基线脚本以及正式 GEMM 汇总器。脚本默认通过集群调度器提交到计算节点，不应在登录节点上执行长时间构建或正式计时。
 
 正式结果覆盖单 NUMA 的 1/8 线程和跨 NUMA 的 8 线程，并以 generic、固定 SME、SAGE、OpenBLAS ARMV8SVE 和 PyTorch 2.7.1 进行同机配对。代表性 1024³ 和 2049³ 形状的 8 线程候选选择消融已补做，使用 14 个候选方法和 3 个独立进程。KML_BLAS 2.2.0 已确认导出 SGEMM，但在实际 Kunpeng 节点初始化时因 CPU ID 校验退出，因此报告中标记为阻塞。完整 CSV、环境记录、校准 profile 和图表随论文实验包保存，未完成的 KML 仍不作为性能结论。
+
+### 协议审计与重绘
+
+Linux 归档可以在不重新计时的情况下运行协议审计。审计只读取 `environment.json`、`samples.csv`、`checks.csv` 和 `process_results.csv`，检查完成状态、主机一致性、独立进程数、窗口数、目标窗口覆盖、数值检查以及编译/首次调用证据：
+
+```sh
+python experiments/linux_arm/protocol_audit.py \
+  /path/to/formal-single-merged /path/to/formal-cross-merged \
+  --json /path/to/protocol-audit.json \
+  --markdown /path/to/protocol-audit.md
+```
+
+已有汇总 CSV 可直接重绘全部 shape sweep 和配对 speedup。脚本把矩形 shape 映射到 $(MNK)^{1/3}$，用独立进程 min--max 作为误差带，并用对数 speedup 轴避免 generic 基线遮住较小的 CPU/BLAS 比值：
+
+```sh
+python experiments/linux_arm/plot_protocol_review.py \
+  --summary /path/to/formal-single-merged-summary.csv \
+            /path/to/formal-cross-merged-summary.csv \
+  --paired /path/to/formal-single-merged-paired.csv \
+           /path/to/formal-cross-merged-paired.csv \
+  --figures /path/to/figures/protocol-review
+```
+
+这两个脚本不提交作业、不访问登录节点上的正式 benchmark，也不修改原始 CSV。图注应把 min--max 标成进程范围，不能称为置信区间。正式计时仍通过 `dsub` 在计算节点完成，登录节点只用于轻量身份、队列和探针检查。

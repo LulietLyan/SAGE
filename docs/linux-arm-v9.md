@@ -37,6 +37,30 @@ OpenBLAS ARMV8SVE 覆盖 33 个形状、单 NUMA 的 1/8 线程和跨 NUMA 的 8
 
 KML_BLAS 2.2.0 已确认包含 LP64 `cblas_sgemm`、线程设置接口和 NEON/SVE pthread 库，但在两个实际 Kunpeng SME 节点初始化时均因 CPU ID 校验退出。现有数据不能支持 KML_BLAS 与 Apple Accelerate 的直接性能结论，正式报告将其标记为阻塞。
 
+## 协议改进和审计
+
+本分支沿用完整同步调用口径。窗口包括方法实际需要的 packing、复制、任务提交、计算和等待，输入生成、输出分配、编译、缓存查询、首次调用和正确性检查单列。每个方法/形状/placement 使用 3 个独立进程和 4 个交错窗口。进程内先取窗口中位数，进程间再取中位数，同时保存 min--max 和 MAD。所有窗口、重复次数、CPU time/wall ratio、实际 CPU 列表、NUMA policy、库映射和 JIT/`fmopa` 证据均保留在归档中。
+
+33 个正式 shape 同时覆盖方阵、非整 tile 方阵、长宽不对称用例和 255/257 cache-boundary 诊断。主文使用同进程配对 speedup 的跨 shape 几何均值，候选消融独立报告 SAGE 与实测候选下界的 observed regret。ARMV9SME OpenBLAS 属于补充诊断，KML_BLAS 属于阻塞项，不能把缺测当作 baseline 结果。
+
+不重新运行服务器实验即可审计和重绘：
+
+```sh
+python experiments/linux_arm/protocol_audit.py \
+  /path/to/formal-single-merged /path/to/formal-cross-merged \
+  --json /path/to/protocol-audit.json \
+  --markdown /path/to/protocol-audit.md
+
+python experiments/linux_arm/plot_protocol_review.py \
+  --summary /path/to/formal-single-merged-summary.csv \
+            /path/to/formal-cross-merged-summary.csv \
+  --paired /path/to/formal-single-merged-paired.csv \
+           /path/to/formal-cross-merged-paired.csv \
+  --figures /path/to/figures/protocol-review
+```
+
+审计脚本只读归档，重绘脚本复用 `experiments/plot_style.py` 并输出 PDF、SVG、PNG。正式 benchmark 继续使用普通 SSH 和 Donau 计算节点，不在登录节点执行长时间构建或计时。
+
 Apple M4 只恢复了论文 ZIP 中的汇总和逐尺寸摘要，逐窗口 CSV 已不在归档中。Linux 结果单独校准和报告。Linux 已补做 8 线程、1024³ 和 2049³ 的 14 方法候选选择消融，单 NUMA 和跨 NUMA 各 3 个进程、4 个窗口，结果保存在论文包的 `data/ablation-single/`、`data/ablation-cross/` 和 `figures/ablation-regret.svg`。这组实验量化选择差距，没有把单个模型项解释为因果贡献。
 
 ## 复跑入口
